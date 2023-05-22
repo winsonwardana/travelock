@@ -1,8 +1,8 @@
 const { User } = require("../models/");
-const { hashPassword } = require("../helpers/brcypt");
-
+const { hashPassword, comparePassword } = require("../helpers/brcypt");
+const { signToken } = require("../helpers/jwt");
 class UserController {
-  static async postRegister(req, res) {
+  static async postRegister(req, res, next) {
     try {
       const { username, email, password } = req.body;
       if (!username) {
@@ -33,30 +33,53 @@ class UserController {
       });
     } catch (err) {
       console.log(err);
-      if (err.name === "Username is required") {
-        res.status(400).json({
-          message: "Username is required",
-        });
-      } else if (err.name === "Email is required") {
-        res.status(400).json({
-          message: "Email is required",
-        });
-      } else if (err.name === "Password is required") {
-        res.status(400).json({
-          message: "Password is required",
-        });
-      } else if (
-        err.name === "SequelizeValidationError" ||
-        err.name === "SequelizeUniqueConstraintError"
-      ) {
-        res.status(400).json({
-          message: `${err.errors[0].message}`,
-        });
-      } else {
-        res.status(500).json({
-          message: "Internal server error",
-        });
+      next(err);
+    }
+  }
+
+  static async postLogin(req, res, next) {
+    try {
+      const { email, password } = req.body;
+      if (!email) {
+        throw {
+          name: "Email is required",
+        };
       }
+      if (!password) {
+        throw {
+          name: "Password is required",
+        };
+      }
+      const findUser = await User.findOne({
+        where: {
+          email,
+        },
+      });
+      if (!findUser) {
+        throw {
+          name: "Invalid email/password",
+        };
+      }
+      const verifyPass = comparePassword(password, findUser.password);
+      if (!verifyPass) {
+        throw {
+          name: "Invalid email/password",
+        };
+      }
+      const payload = {
+        id: findUser.id,
+        username: findUser.username,
+        email,
+      };
+      const token = signToken(payload);
+      res.status(200).json({
+        access_token: token,
+      });
+
+      // console.log(findUser);
+    } catch (err) {
+      console.log(err);
+      next(err);
     }
   }
 }
